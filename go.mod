@@ -1,4 +1,4 @@
-module github.com/devnw/conductors
+module github.com/devnw/amqp
 
 go 1.14
 
