@@ -2,8 +2,8 @@ github.com/Pallinder/go-randomdata v1.2.0 h1:DZ41wBchNRb/0GfsePLiSwb0PHZmT67XY00
 github.com/Pallinder/go-randomdata v1.2.0/go.mod h1:yHmJgulpD2Nfrm0cR9tI/+oAgRqCQQixsA8HyRZfV9Y=
 github.com/devnw/alog v1.0.1 h1:9CzzUwapaWsVWfPdnpaCKxFHFdfsx2tVbft3grV3AH0=
 github.com/devnw/alog v1.0.1/go.mod h1:Aw4xF3fFZcv69DP3Ohu3OOMIJAtXZuY+tsXZusFrav8=
-github.com/devnw/atomizer v0.0.0-20200425014640-bf9d01a48c35 h1:r40qDqCdTltp7wV0aOe14KDQr1+249Ywmy2y4uadQS0=
-github.com/devnw/atomizer v0.0.0-20200425014640-bf9d01a48c35/go.mod h1:nCXymI4QeHuGc9XW9HyRbG1k46YOJZCCc6ujQiQwtYU=
+github.com/devnw/atomizer v0.0.0-20200426214931-63adb38aac5b h1:fSNRdGzFCcqnKwFUOfSMuFZfFLesq1aqimffXt2e8us=
+github.com/devnw/atomizer v0.0.0-20200426214931-63adb38aac5b/go.mod h1:nCXymI4QeHuGc9XW9HyRbG1k46YOJZCCc6ujQiQwtYU=
 github.com/devnw/validator v1.0.2 h1:AHOWd/lAfYafLdMJIkQwehiZSzhbYgyl4DrYbGrlKXI=
 github.com/devnw/validator v1.0.2/go.mod h1:YkDaw+j5A2uy3DMqhyecRqUhlDofVuCvsLTaiXh+Dn8=
 github.com/google/uuid v1.1.1 h1:Gkbcsh/GbpXz7lPftLA3P6TYMwjCLYm83jiFQZF/3gY=

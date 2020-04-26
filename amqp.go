@@ -3,6 +3,7 @@ package amqp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 
 	"github.com/devnw/alog"
@@ -23,7 +24,9 @@ func Connect(
 	ctx context.Context,
 	connectionstring,
 	inqueue string,
-) (atomizer.Conductor, error) {
+) (c atomizer.Conductor, err error) {
+	defer rec(&err)
+
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -36,7 +39,7 @@ func Connect(
 		cancel:      cancel,
 		in:          inqueue,
 		uuid:        uuid.New().String(),
-		electrons:   make(map[string]chan<- *atomizer.Properties),
+		electrons:   make(map[string]chan<- atomizer.Properties),
 		electronsMu: sync.Mutex{},
 		pubs:        make(map[string]chan []byte),
 		pubsmutty:   sync.Mutex{},
@@ -59,8 +62,15 @@ func Connect(
 	}
 
 	mq.connection = connection
+	alog.Printf("conductor established [%s]", mq.uuid)
 
 	return mq, nil
+}
+
+func rec(e *error) {
+	if r := recover(); r != nil {
+		*e = errors.New(fmt.Sprintf("panic %v", r))
+	}
 }
 
 //The rabbitmq struct uses the amqp library to connect to rabbitmq in order
@@ -76,7 +86,7 @@ type rabbitmq struct {
 	uuid   string
 	sender sync.Map
 
-	electrons   map[string]chan<- *atomizer.Properties
+	electrons   map[string]chan<- atomizer.Properties
 	electronsMu sync.Mutex
 	once        sync.Once
 
@@ -114,8 +124,7 @@ func (r *rabbitmq) Receive(ctx context.Context) <-chan atomizer.Electron {
 				e := atomizer.Electron{}
 				err := json.Unmarshal(msg, &e)
 				if err != nil {
-					err = errors.Errorf("unable to parse electron %s", string(msg))
-					alog.Errorf(err, "")
+					alog.Errorf(err, "unable to parse electron %s", string(msg))
 				}
 
 				r.sender.Store(e.ID, e.SenderID)
@@ -147,9 +156,9 @@ func (r *rabbitmq) fanResults(ctx context.Context) {
 
 				go func(result []byte) {
 					// Unwrap the object
-					p := &atomizer.Properties{}
-					if err := json.Unmarshal(result, p); err == nil {
-						var c chan<- *atomizer.Properties
+					p := atomizer.Properties{}
+					if err := json.Unmarshal(result, &p); err == nil {
+						var c chan<- atomizer.Properties
 
 						// Pull the results channel for the electron
 						r.electronsMu.Lock()
@@ -254,14 +263,14 @@ func (r *rabbitmq) getReceiver(ctx context.Context, queue string) <-chan []byte 
 }
 
 // Complete mark the completion of an electron instance with applicable statistics
-func (r *rabbitmq) Complete(ctx context.Context, properties *atomizer.Properties) (err error) {
+func (r *rabbitmq) Complete(ctx context.Context, properties atomizer.Properties) (err error) {
 
 	if s, ok := r.sender.Load(properties.ElectronID); ok {
 
 		if senderID, ok := s.(string); ok {
 
 			var result []byte
-			if result, err = json.Marshal(properties); err == nil {
+			if result, err = json.Marshal(&properties); err == nil {
 				if err = r.publish(ctx, senderID, result); err == nil {
 					alog.Printf("sent results for electron [%s] to sender [%s]", properties.ElectronID, senderID)
 				} else {
@@ -328,6 +337,7 @@ func (r *rabbitmq) getPublisher(ctx context.Context, queue string) chan<- []byte
 
 			if err != nil {
 				alog.Error(err)
+				return
 			}
 
 			for {
@@ -362,16 +372,16 @@ func (r *rabbitmq) getPublisher(ctx context.Context, queue string) chan<- []byte
 }
 
 // Sends electrons back out through the conductor for additional processing
-func (r *rabbitmq) Send(ctx context.Context, electron atomizer.Electron) (<-chan *atomizer.Properties, error) {
+func (r *rabbitmq) Send(ctx context.Context, electron atomizer.Electron) (<-chan atomizer.Properties, error) {
 	var e []byte
 	var err error
-	respond := make(chan *atomizer.Properties)
+	respond := make(chan atomizer.Properties)
 
 	// setup the results fan out
 	go r.once.Do(func() { r.fanResults(ctx) })
 
 	// TODO: Add in timeout here
-	go func(ctx context.Context, electron atomizer.Electron, respond chan<- *atomizer.Properties) {
+	go func(ctx context.Context, electron atomizer.Electron, respond chan<- atomizer.Properties) {
 
 		electron.SenderID = r.uuid
 
