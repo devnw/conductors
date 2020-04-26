@@ -1,4 +1,4 @@
-package conductors
+package amqp
 
 import (
 	"context"
