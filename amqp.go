@@ -30,7 +30,11 @@ func Connect(
 	connectionstring,
 	inqueue string,
 ) (c atomizer.Conductor, err error) {
-	defer rec(&err)
+	defer func() {
+		if r := recover(); r != nil {
+			err = errors.New(fmt.Sprintf("panic %v", r))
+		}
+	}()
 
 	if ctx == nil {
 		ctx = context.Background()
@@ -56,9 +60,6 @@ func Connect(
 
 	// TODO: Add additional validation here for formatting later
 
-	// Setup cleanup to run when the context closes
-	go mq.Cleanup()
-
 	// Dial the connection
 	connection, err := amqp.Dial(connectionstring)
 	if err != nil {
@@ -66,16 +67,13 @@ func Connect(
 		return nil, errors.Errorf("error connecting to rabbitmq | %s", err.Error())
 	}
 
+	// Setup cleanup to run when the context closes
+	go mq.Cleanup()
+
 	mq.connection = connection
 	alog.Printf("conductor established [%s]", mq.uuid)
 
 	return mq, nil
-}
-
-func rec(e *error) {
-	if r := recover(); r != nil {
-		*e = errors.New(fmt.Sprintf("panic %v", r))
-	}
 }
 
 //The rabbitmq struct uses the amqp library to connect to rabbitmq in order
