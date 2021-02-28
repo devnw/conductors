@@ -11,8 +11,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/devnw/alog"
-	"github.com/devnw/atomizer"
+	"atomizer.io/engine"
+	"devnw.com/alog"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/streadway/amqp"
@@ -29,7 +29,7 @@ func Connect(
 	ctx context.Context,
 	connectionstring,
 	inqueue string,
-) (c atomizer.Conductor, err error) {
+) (c engine.Conductor, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = errors.New(fmt.Sprintf("panic %v", r))
@@ -48,7 +48,7 @@ func Connect(
 		cancel:      cancel,
 		in:          inqueue,
 		uuid:        uuid.New().String(),
-		electrons:   make(map[string]chan<- atomizer.Properties),
+		electrons:   make(map[string]chan<- engine.Properties),
 		electronsMu: sync.Mutex{},
 		pubs:        make(map[string]chan []byte),
 		pubsmutty:   sync.Mutex{},
@@ -89,7 +89,7 @@ type rabbitmq struct {
 	uuid   string
 	sender sync.Map
 
-	electrons   map[string]chan<- atomizer.Properties
+	electrons   map[string]chan<- engine.Properties
 	electronsMu sync.Mutex
 	once        sync.Once
 
@@ -106,10 +106,10 @@ func (r *rabbitmq) Cleanup() {
 
 // Receive gets the atoms from the source that are available to atomize.
 // Part of the Conductor interface
-func (r *rabbitmq) Receive(ctx context.Context) <-chan atomizer.Electron {
-	electrons := make(chan atomizer.Electron)
+func (r *rabbitmq) Receive(ctx context.Context) <-chan engine.Electron {
+	electrons := make(chan engine.Electron)
 
-	go func(electrons chan<- atomizer.Electron) {
+	go func(electrons chan<- engine.Electron) {
 		defer close(electrons)
 
 		in := r.getReceiver(ctx, r.in)
@@ -124,7 +124,7 @@ func (r *rabbitmq) Receive(ctx context.Context) <-chan atomizer.Electron {
 					return
 				}
 
-				e := atomizer.Electron{}
+				e := engine.Electron{}
 				err := json.Unmarshal(msg, &e)
 				if err != nil {
 					alog.Errorf(err, "unable to parse electron %s", string(msg))
@@ -166,7 +166,7 @@ func (r *rabbitmq) fanResults(ctx context.Context) {
 	}(results)
 }
 
-func (r *rabbitmq) pop(key string) (chan<- atomizer.Properties, bool) {
+func (r *rabbitmq) pop(key string) (chan<- engine.Properties, bool) {
 
 	r.electronsMu.Lock()
 	defer r.electronsMu.Unlock()
@@ -184,7 +184,7 @@ func (r *rabbitmq) pop(key string) (chan<- atomizer.Properties, bool) {
 func (r *rabbitmq) fanIn(result []byte) {
 
 	// Unwrap the object
-	p := atomizer.Properties{}
+	p := engine.Properties{}
 	if err := json.Unmarshal(result, &p); err != nil {
 		alog.Errorf(err, "error while un-marshalling results for conductor [%s]", r.uuid)
 		return
@@ -285,7 +285,7 @@ func (r *rabbitmq) getReceiver(
 }
 
 // Complete mark the completion of an electron instance with applicable statistics
-func (r *rabbitmq) Complete(ctx context.Context, properties atomizer.Properties) (err error) {
+func (r *rabbitmq) Complete(ctx context.Context, properties engine.Properties) (err error) {
 
 	if s, ok := r.sender.Load(properties.ElectronID); ok {
 
@@ -394,16 +394,16 @@ func (r *rabbitmq) getPublisher(ctx context.Context, queue string) chan<- []byte
 }
 
 // Sends electrons back out through the conductor for additional processing
-func (r *rabbitmq) Send(ctx context.Context, electron atomizer.Electron) (<-chan atomizer.Properties, error) {
+func (r *rabbitmq) Send(ctx context.Context, electron engine.Electron) (<-chan engine.Properties, error) {
 	var e []byte
 	var err error
-	respond := make(chan atomizer.Properties)
+	respond := make(chan engine.Properties)
 
 	// setup the results fan out
 	r.once.Do(func() { r.fanResults(ctx) })
 
 	// TODO: Add in timeout here
-	go func(ctx context.Context, electron atomizer.Electron, respond chan<- atomizer.Properties) {
+	go func(ctx context.Context, electron engine.Electron, respond chan<- engine.Properties) {
 
 		electron.SenderID = r.uuid
 

@@ -1,10 +1,10 @@
-module github.com/devnw/amqp
+module atomizer.io/amqp
 
-go 1.14
+go 1.16
 
 require (
-	github.com/devnw/alog v1.0.2
-	github.com/devnw/atomizer v1.0.0
+	atomizer.io/engine v1.0.2
+	devnw.com/alog v1.0.3
 	github.com/google/uuid v1.2.0
 	github.com/pkg/errors v0.9.1
 	github.com/streadway/amqp v0.0.0-20200108173154-1c71cc93ed71
