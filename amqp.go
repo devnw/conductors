@@ -149,6 +149,12 @@ func (r *rabbitmq) fanResults(ctx context.Context) {
 	results := r.getReceiver(ctx, r.uuid)
 
 	go func(results <-chan []byte) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				r.cancel()
+			}
+		}()
+
 		alog.Printf("conductor [%s] receiver initialized", r.uuid)
 
 		for {
