@@ -1,7 +1,8 @@
 atomizer.io/engine v1.0.2 h1:hTKw7LnH/15vcwzeU1ZUZ2HAeREuHvzqkoMiu3LB2Oo=
 atomizer.io/engine v1.0.2/go.mod h1:7ezWwhtUcxI5yJ24kIwD0Fx9tKxt2A3yof5+aRLRuw4=
-devnw.com/alog v1.0.3 h1:4aGSIYq8Cwd2AojwxszFgdpEJt6ry1bWX8BRpwnA7Vw=
 devnw.com/alog v1.0.3/go.mod h1:lru/QNxp9ZipMOpOCGIl753dOtuBed6d2PeWwkj8lYY=
+devnw.com/alog v1.0.4 h1:ssLv7DfLPl1CukgnUP9rfCszLJYolDezRLTdp21ekig=
+devnw.com/alog v1.0.4/go.mod h1:t58jvdr81ifx7wEV5SwBRlUjYlbvTZMuSgu2zMuLV1k=
 devnw.com/validator v1.0.3 h1:SDtgLe/ebKQe54dwAu7fGKmjRYBFEPWYF5Lqb5smK/o=
 devnw.com/validator v1.0.3/go.mod h1:Z9GH0cjDxgmcAvpAh74ZRkmoB9OIroKFGboNa+Q3L3g=
 github.com/Pallinder/go-randomdata v1.2.0 h1:DZ41wBchNRb/0GfsePLiSwb0PHZmT67XY00lCDlaYPg=
@@ -20,4 +21,5 @@ github.com/streadway/amqp v1.0.0 h1:kuuDrUJFZL1QYL9hUNuCxNObNzB0bV/ZG5jV3RWAQgo=
 github.com/streadway/amqp v1.0.0/go.mod h1:AZpEONHx3DKn8O/DFsRAY58/XVQiIPMTMB1SddzLXVw=
 golang.org/x/text v0.3.2/go.mod h1:bEr9sfX3Q8Zfm5fL9x+3itogRgK3+ptLWKqgva+5dAk=
 golang.org/x/tools v0.0.0-20180917221912-90fa682c2a6e/go.mod h1:n7NCudcB/nEzxVGmLbDWY5pfWTLqBcC2KZ6jyYvM4mQ=
+golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543 h1:E7g+9GITq07hpfrRu66IVDexMakfv52eLZ2CXBWiKr4=
 golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
