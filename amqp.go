@@ -14,12 +14,11 @@ import (
 	"atomizer.io/engine"
 	"devnw.com/alog"
 	"github.com/google/uuid"
-	"github.com/pkg/errors"
 	"github.com/streadway/amqp"
 )
 
 const (
-	//DEFAULTADDRESS is the address to connect to rabbitmq
+	// DEFAULTADDRESS is the address to connect to rabbitmq
 	DEFAULTADDRESS string = "amqp://guest:guest@localhost:5672/"
 )
 
@@ -32,7 +31,7 @@ func Connect(
 ) (c engine.Conductor, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = errors.New(fmt.Sprintf("panic %v", r))
+			err = &Error{fmt.Sprintf("panic %v", r)}
 		}
 	}()
 
@@ -48,14 +47,14 @@ func Connect(
 		cancel:      cancel,
 		in:          inqueue,
 		uuid:        uuid.New().String(),
-		electrons:   make(map[string]chan<- engine.Properties),
+		electrons:   make(map[string]chan<- *engine.Properties),
 		electronsMu: sync.Mutex{},
 		pubs:        make(map[string]chan []byte),
 		pubsmutty:   sync.Mutex{},
 	}
 
 	if connectionstring == "" {
-		return nil, errors.New("empty connection string")
+		return nil, &Error{"empty connection string"}
 	}
 
 	// TODO: Add additional validation here for formatting later
@@ -64,7 +63,9 @@ func Connect(
 	connection, err := amqp.Dial(connectionstring)
 	if err != nil {
 		defer mq.cancel()
-		return nil, errors.Errorf("error connecting to rabbitmq | %s", err.Error())
+		return nil, &Error{
+			fmt.Sprintf("error connecting to rabbitmq | %s", err.Error()),
+		}
 	}
 
 	// Setup cleanup to run when the context closes
@@ -76,7 +77,7 @@ func Connect(
 	return mq, nil
 }
 
-//The rabbitmq struct uses the amqp library to connect to rabbitmq in order
+// The rabbitmq struct uses the amqp library to connect to rabbitmq in order
 // to send and receive from the message queue.
 type rabbitmq struct {
 	ctx    context.Context
@@ -89,7 +90,7 @@ type rabbitmq struct {
 	uuid   string
 	sender sync.Map
 
-	electrons   map[string]chan<- engine.Properties
+	electrons   map[string]chan<- *engine.Properties
 	electronsMu sync.Mutex
 	once        sync.Once
 
@@ -106,17 +107,16 @@ func (r *rabbitmq) Cleanup() {
 
 // Receive gets the atoms from the source that are available to atomize.
 // Part of the Conductor interface
-func (r *rabbitmq) Receive(ctx context.Context) <-chan engine.Electron {
-	electrons := make(chan engine.Electron)
+func (r *rabbitmq) Receive(ctx context.Context) <-chan *engine.Electron {
+	electrons := make(chan *engine.Electron)
 
-	go func(electrons chan<- engine.Electron) {
+	go func(electrons chan<- *engine.Electron) {
 		defer close(electrons)
 
 		in := r.getReceiver(ctx, r.in)
 
 		for {
 			select {
-
 			case <-ctx.Done():
 				return
 			case msg, ok := <-in:
@@ -124,8 +124,8 @@ func (r *rabbitmq) Receive(ctx context.Context) <-chan engine.Electron {
 					return
 				}
 
-				e := engine.Electron{}
-				err := json.Unmarshal(msg, &e)
+				e := &engine.Electron{}
+				err := json.Unmarshal(msg, e)
 				if err != nil {
 					alog.Errorf(err, "unable to parse electron %s", string(msg))
 				}
@@ -172,8 +172,7 @@ func (r *rabbitmq) fanResults(ctx context.Context) {
 	}(results)
 }
 
-func (r *rabbitmq) pop(key string) (chan<- engine.Properties, bool) {
-
+func (r *rabbitmq) pop(key string) (chan<- *engine.Properties, bool) {
 	r.electronsMu.Lock()
 	defer r.electronsMu.Unlock()
 
@@ -188,11 +187,10 @@ func (r *rabbitmq) pop(key string) (chan<- engine.Properties, bool) {
 }
 
 func (r *rabbitmq) fanIn(result []byte) {
-
 	// Unwrap the object
-	p := engine.Properties{}
+	p := &engine.Properties{}
 	if err := json.Unmarshal(result, &p); err != nil {
-		alog.Errorf(err, "error while un-marshalling results for conductor [%s]", r.uuid)
+		alog.Errorf(err, "error while un-marshaling results for conductor [%s]", r.uuid)
 		return
 	}
 
@@ -211,7 +209,6 @@ func (r *rabbitmq) fanIn(result []byte) {
 	case c <- p: // push the result onto the channel
 		alog.Printf("sent electron [%s] results to channel", p.ElectronID)
 	}
-
 }
 
 // Gets the list of messages that have been sent to the queue and returns
@@ -220,7 +217,6 @@ func (r *rabbitmq) getReceiver(
 	ctx context.Context,
 	queue string,
 ) <-chan []byte {
-
 	// Create the inbound processing exchanges and queues
 	c, err := r.connection.Channel()
 	if err != nil {
@@ -284,26 +280,19 @@ func (r *rabbitmq) getReceiver(
 				out <- msg.Body
 			}
 		}
-
 	}(in, out)
 
 	return out
 }
 
 // Complete mark the completion of an electron instance with applicable statistics
-func (r *rabbitmq) Complete(ctx context.Context, properties engine.Properties) (err error) {
-
+func (r *rabbitmq) Complete(ctx context.Context, properties *engine.Properties) (err error) {
 	if s, ok := r.sender.Load(properties.ElectronID); ok {
-
 		if senderID, ok := s.(string); ok {
-
 			var result []byte
 			if result, err = json.Marshal(&properties); err == nil {
-				if err = r.publish(ctx, senderID, result); err == nil {
-					alog.Printf("sent results for electron [%s] to sender [%s]", properties.ElectronID, senderID)
-				} else {
-					alog.Errorf(err, "error publishing results for electron [%s]", properties.ElectronID)
-				}
+				r.publish(ctx, senderID, result)
+				alog.Printf("sent results for electron [%s] to sender [%s]", properties.ElectronID, senderID)
 			}
 		}
 	}
@@ -311,17 +300,13 @@ func (r *rabbitmq) Complete(ctx context.Context, properties engine.Properties) (
 	return err
 }
 
-//Publishes an electron for processing or publishes a completed electron's properties
-func (r *rabbitmq) publish(ctx context.Context, queue string, message []byte) (err error) {
-
+// Publishes an electron for processing or publishes a completed electron's properties
+func (r *rabbitmq) publish(ctx context.Context, queue string, message []byte) {
 	select {
 	case <-ctx.Done():
 		return
 	case r.getPublisher(ctx, queue) <- message:
-		// TODO:
 	}
-
-	return err
 }
 
 // TODO: re-evaluate the errors here and determine if they should panic instead
@@ -333,7 +318,6 @@ func (r *rabbitmq) getPublisher(ctx context.Context, queue string) chan<- []byte
 
 	// create the channel used for publishing and setup a go channel to monitor for publishing requests
 	if p == nil {
-
 		// Create the channel and update the map
 		p = make(chan []byte)
 		r.pubs[queue] = p
@@ -400,38 +384,34 @@ func (r *rabbitmq) getPublisher(ctx context.Context, queue string) chan<- []byte
 }
 
 // Sends electrons back out through the conductor for additional processing
-func (r *rabbitmq) Send(ctx context.Context, electron engine.Electron) (<-chan engine.Properties, error) {
+func (r *rabbitmq) Send(ctx context.Context, electron *engine.Electron) (<-chan *engine.Properties, error) {
 	var e []byte
 	var err error
-	respond := make(chan engine.Properties)
+	respond := make(chan *engine.Properties)
+
+	if electron == nil {
+		defer close(respond)
+		return respond, &Error{"nil electron"}
+	}
 
 	// setup the results fan out
 	r.once.Do(func() { r.fanResults(ctx) })
 
 	// TODO: Add in timeout here
-	go func(ctx context.Context, electron engine.Electron, respond chan<- engine.Properties) {
-
+	go func(ctx context.Context, electron *engine.Electron, respond chan<- *engine.Properties) {
 		electron.SenderID = r.uuid
 
 		if e, err = json.Marshal(electron); err == nil {
-			var err error
-			// ctx, cancel := context.WithTimeout(ctx, time.Second*30)
-			// defer cancel()
-
 			// Register the electron return channel prior to publishing the request
 			r.electronsMu.Lock()
 			r.electrons[electron.ID] = respond
 			r.electronsMu.Unlock()
 
 			// publish the request to the message queue
-			if err = r.publish(ctx, r.in, e); err == nil {
-				alog.Printf("sent electron [%s] for processing\n", electron.ID)
-			} else {
-				alog.Errorf(err, "error sending electron [%s] for processing", electron.ID)
-			}
-
+			r.publish(ctx, r.in, e)
+			alog.Printf("sent electron [%s] for processing\n", electron.ID)
 		} else {
-			alog.Errorf(err, "error while marshalling electron [%s]", electron.ID)
+			alog.Errorf(err, "error while marshaling electron [%s]", electron.ID)
 		}
 	}(ctx, electron, respond)
 
@@ -439,7 +419,6 @@ func (r *rabbitmq) Send(ctx context.Context, electron engine.Electron) (<-chan e
 }
 
 func (r *rabbitmq) Close() {
-
 	// cancel out the internal context cleaning up the rabbit connection and channel
 	r.cancel()
 }

@@ -75,7 +75,7 @@ linters:
     - errcheck
     - exhaustive
     - funlen
-    - gochecknoinits
+    # - gochecknoinits
     - goconst
     - gocritic
     - gocyclo
@@ -126,6 +126,12 @@ issues:
     - path: _test\.go
       linters:
         - gomnd
+        - scopelint
+        - gocyclo
+        - errcheck
+        - dupl
+        - gosec
+        - lll
 
     # https://github.com/go-critic/go-critic/issues/926
     - linters:
