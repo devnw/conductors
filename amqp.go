@@ -8,6 +8,7 @@ package amqp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -31,7 +32,7 @@ func Connect(
 ) (c engine.Conductor, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = &Error{fmt.Sprintf("panic %v", r)}
+			err = fmt.Errorf("panic %v", r)
 		}
 	}()
 
@@ -54,7 +55,7 @@ func Connect(
 	}
 
 	if connectionstring == "" {
-		return nil, &Error{"empty connection string"}
+		return nil, errors.New("empty connection string")
 	}
 
 	// TODO: Add additional validation here for formatting later
@@ -63,9 +64,7 @@ func Connect(
 	connection, err := amqp.Dial(connectionstring)
 	if err != nil {
 		defer mq.cancel()
-		return nil, &Error{
-			fmt.Sprintf("error connecting to rabbitmq | %s", err.Error()),
-		}
+		return nil, fmt.Errorf("error connecting to rabbitmq | %s", err.Error())
 	}
 
 	// Setup cleanup to run when the context closes
@@ -391,7 +390,7 @@ func (r *rabbitmq) Send(ctx context.Context, electron *engine.Electron) (<-chan 
 
 	if electron == nil {
 		defer close(respond)
-		return respond, &Error{"nil electron"}
+		return respond, errors.New("nil electron")
 	}
 
 	// setup the results fan out
