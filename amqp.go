@@ -61,7 +61,7 @@ func Connect(
 	// TODO: Add additional validation here for formatting later
 
 	// Dial the connection
-	connection, err := amqp.Dial(connectionstring)
+	mq.connection, err = amqp.Dial(connectionstring)
 	if err != nil {
 		defer mq.cancel()
 		return nil, fmt.Errorf("error connecting to rabbitmq | %s", err.Error())
@@ -70,7 +70,6 @@ func Connect(
 	// Setup cleanup to run when the context closes
 	go mq.Cleanup()
 
-	mq.connection = connection
 	alog.Printf("conductor established [%s]", mq.uuid)
 
 	return mq, nil
@@ -112,7 +111,11 @@ func (r *rabbitmq) Receive(ctx context.Context) <-chan *engine.Electron {
 	go func(electrons chan<- *engine.Electron) {
 		defer close(electrons)
 
-		in := r.getReceiver(ctx, r.in)
+		in, err := r.getReceiver(ctx, r.in)
+		if err != nil {
+			alog.Error(err)
+			return
+		}
 
 		for {
 			select {
@@ -145,7 +148,11 @@ func (r *rabbitmq) Receive(ctx context.Context) <-chan *engine.Electron {
 }
 
 func (r *rabbitmq) fanResults(ctx context.Context) {
-	results := r.getReceiver(ctx, r.uuid)
+	results, err := r.getReceiver(ctx, r.uuid)
+	if err != nil {
+		alog.Error(err)
+		return
+	}
 
 	go func(results <-chan []byte) {
 		defer func() {
@@ -215,11 +222,11 @@ func (r *rabbitmq) fanIn(result []byte) {
 func (r *rabbitmq) getReceiver(
 	ctx context.Context,
 	queue string,
-) <-chan []byte {
+) (<-chan []byte, error) {
 	// Create the inbound processing exchanges and queues
 	c, err := r.connection.Channel()
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
 	_, err = c.QueueDeclare(
@@ -231,7 +238,7 @@ func (r *rabbitmq) getReceiver(
 		nil,   // arguments
 	)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
 	// Prefetch variables
@@ -242,7 +249,7 @@ func (r *rabbitmq) getReceiver(
 	)
 
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
 	in, err := c.Consume(
@@ -257,7 +264,7 @@ func (r *rabbitmq) getReceiver(
 	)
 
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
 	out := make(chan []byte)
@@ -276,12 +283,13 @@ func (r *rabbitmq) getReceiver(
 					return
 				}
 
+				fmt.Println("GOT MESSAGE, SENDING")
 				out <- msg.Body
 			}
 		}
 	}(in, out)
 
-	return out
+	return out, nil
 }
 
 // Complete mark the completion of an electron instance with applicable statistics
