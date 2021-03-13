@@ -283,7 +283,6 @@ func (r *rabbitmq) getReceiver(
 					return
 				}
 
-				fmt.Println("GOT MESSAGE, SENDING")
 				out <- msg.Body
 			}
 		}
