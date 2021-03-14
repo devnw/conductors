@@ -13,7 +13,6 @@ import (
 	"sync"
 
 	"atomizer.io/engine"
-	"devnw.com/alog"
 	"github.com/google/uuid"
 	"github.com/streadway/amqp"
 )
@@ -23,13 +22,19 @@ const (
 	DEFAULTADDRESS string = "amqp://guest:guest@localhost:5672/"
 )
 
+type Conductor interface {
+	engine.Conductor
+	Events(buffer int) <-chan interface{}
+	Errors(buffer int) <-chan error
+}
+
 // Connect uses the connection string that is passed in to initialize
 // the rabbitmq conductor
 func Connect(
 	ctx context.Context,
 	connectionstring,
 	inqueue string,
-) (c engine.Conductor, err error) {
+) (c Conductor, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("panic %v", r)
@@ -70,7 +75,9 @@ func Connect(
 	// Setup cleanup to run when the context closes
 	go mq.Cleanup()
 
-	alog.Printf("conductor established [%s]", mq.uuid)
+	mq.event(func() interface{} {
+		return fmt.Sprintf("conductor established [%s]", mq.uuid)
+	})
 
 	return mq, nil
 }
@@ -96,6 +103,12 @@ type rabbitmq struct {
 
 	pubs      map[string]chan []byte
 	pubsmutty sync.Mutex
+
+	eventsMu sync.RWMutex
+	events   chan interface{}
+
+	errorsMu sync.RWMutex
+	errors   chan error
 }
 
 func (r *rabbitmq) Cleanup() {
@@ -113,7 +126,9 @@ func (r *rabbitmq) Receive(ctx context.Context) <-chan *engine.Electron {
 
 		in, err := r.getReceiver(ctx, r.in)
 		if err != nil {
-			alog.Error(err)
+			r.err(func() error {
+				return err
+			})
 			return
 		}
 
@@ -129,7 +144,9 @@ func (r *rabbitmq) Receive(ctx context.Context) <-chan *engine.Electron {
 				e := &engine.Electron{}
 				err := json.Unmarshal(msg, e)
 				if err != nil {
-					alog.Errorf(err, "unable to parse electron %s", string(msg))
+					r.err(func() error {
+						return fmt.Errorf("unable to parse electron %s | [%s]", string(msg), err)
+					})
 				}
 
 				r.sender.Store(e.ID, e.SenderID)
@@ -138,7 +155,9 @@ func (r *rabbitmq) Receive(ctx context.Context) <-chan *engine.Electron {
 				case <-ctx.Done():
 					return
 				case electrons <- e:
-					alog.Printf("electron [%s] received by conductor", e.ID)
+					r.event(func() interface{} {
+						return fmt.Sprintf("electron [%s] received by conductor", e.ID)
+					})
 				}
 			}
 		}
@@ -150,7 +169,9 @@ func (r *rabbitmq) Receive(ctx context.Context) <-chan *engine.Electron {
 func (r *rabbitmq) fanResults(ctx context.Context) {
 	results, err := r.getReceiver(ctx, r.uuid)
 	if err != nil {
-		alog.Error(err)
+		r.err(func() error {
+			return err
+		})
 		return
 	}
 
@@ -161,7 +182,9 @@ func (r *rabbitmq) fanResults(ctx context.Context) {
 			}
 		}()
 
-		alog.Printf("conductor [%s] receiver initialized", r.uuid)
+		r.event(func() interface{} {
+			return fmt.Sprintf("conductor [%s] receiver initialized", r.uuid)
+		})
 
 		for {
 			select {
@@ -196,11 +219,15 @@ func (r *rabbitmq) fanIn(result []byte) {
 	// Unwrap the object
 	p := &engine.Properties{}
 	if err := json.Unmarshal(result, &p); err != nil {
-		alog.Errorf(err, "error while un-marshaling results for conductor [%s]", r.uuid)
+		r.err(func() error {
+			return fmt.Errorf("error while un-marshaling results for conductor [%s] | [%s]", r.uuid, err)
+		})
 		return
 	}
 
-	alog.Printf("received electron [%s] result from node", p.ElectronID)
+	r.event(func() interface{} {
+		return fmt.Sprintf("received electron [%s] result from node", p.ElectronID)
+	})
 
 	c, ok := r.pop(p.ElectronID)
 	if !ok {
@@ -213,7 +240,10 @@ func (r *rabbitmq) fanIn(result []byte) {
 	case <-r.ctx.Done():
 		return
 	case c <- p: // push the result onto the channel
-		alog.Printf("sent electron [%s] results to channel", p.ElectronID)
+
+		r.event(func() interface{} {
+			return fmt.Sprintf("sent electron [%s] results to channel", p.ElectronID)
+		})
 	}
 }
 
@@ -298,7 +328,10 @@ func (r *rabbitmq) Complete(ctx context.Context, properties *engine.Properties) 
 			var result []byte
 			if result, err = json.Marshal(&properties); err == nil {
 				r.publish(ctx, senderID, result)
-				alog.Printf("sent results for electron [%s] to sender [%s]", properties.ElectronID, senderID)
+
+				r.event(func() interface{} {
+					return fmt.Sprintf("sent results for electron [%s] to sender [%s]", properties.ElectronID, senderID)
+				})
 			}
 		}
 	}
@@ -336,7 +369,9 @@ func (r *rabbitmq) getPublisher(ctx context.Context, queue string) chan<- []byte
 		) {
 			c, err := connection.Channel()
 			if err != nil {
-				alog.Error(err)
+				r.err(func() error {
+					return err
+				})
 				return
 			}
 
@@ -354,7 +389,9 @@ func (r *rabbitmq) getPublisher(ctx context.Context, queue string) chan<- []byte
 			)
 
 			if err != nil {
-				alog.Error(err)
+				r.err(func() error {
+					return err
+				})
 				return
 			}
 
@@ -378,7 +415,9 @@ func (r *rabbitmq) getPublisher(ctx context.Context, queue string) chan<- []byte
 						})
 
 					if err != nil {
-						alog.Error(err)
+						r.err(func() error {
+							return err
+						})
 						continue
 					}
 				}
@@ -415,9 +454,14 @@ func (r *rabbitmq) Send(ctx context.Context, electron *engine.Electron) (<-chan 
 
 			// publish the request to the message queue
 			r.publish(ctx, r.in, e)
-			alog.Printf("sent electron [%s] for processing\n", electron.ID)
+
+			r.event(func() interface{} {
+				return fmt.Sprintf("sent electron [%s] for processing\n", electron.ID)
+			})
 		} else {
-			alog.Errorf(err, "error while marshaling electron [%s]", electron.ID)
+			r.err(func() error {
+				return fmt.Errorf("error while marshaling electron [%s] | [%s]", electron.ID, err)
+			})
 		}
 	}(ctx, electron, respond)
 
