@@ -1,5 +1,6 @@
 atomizer.io/engine v1.0.3 h1:lPF9Re2HuhjSrVmDliI2sPivtcgwFR8rIxhaazQeAk8=
 atomizer.io/engine v1.0.3/go.mod h1:IZX4SAOgqFmGhKDDHEHBZy7GW2Qzd1rk4XDHl2lDrfE=
+atomizer.io/engine v1.0.4/go.mod h1:IZX4SAOgqFmGhKDDHEHBZy7GW2Qzd1rk4XDHl2lDrfE=
 devnw.com/alog v1.0.6 h1:TI4kZ4ngOXeRPBJIoXclxKA9XuR9sdRDzXHEDW5bVfM=
 devnw.com/alog v1.0.6/go.mod h1:beJR4S7HRbotF4/Syc4lbJtbCJwHcTKo9lz9J0KDBd8=
 devnw.com/validator v1.0.4 h1:pSe5CoV9gPEjWDU0c0JUilY6m2+jCma8oI9HXYP2EYw=
